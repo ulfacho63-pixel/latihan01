@@ -207,6 +207,11 @@ elif col_jenis:
 else:
     st.info("Kolom jenis kekerasan tidak ada atau tidak terdeteksi (opsional).")
 
+# Preview sample baris (opsional, singkat)
+st.markdown("---")
+st.subheader("Contoh baris data (2024)")
+st.dataframe(data2024.head(10), use_container_width=True)
+
 # --------------------------
 # Penjelasan singkat / edukatif
 # --------------------------
