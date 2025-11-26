@@ -6,15 +6,13 @@ import matplotlib.pyplot as plt
 import os
 
 st.set_page_config(page_title="Visualisasi Data", page_icon="📊", layout="wide")
-
 st.title("📊 Visualisasi Data Kekerasan Seksual terhadap Perempuan")
 
-# --- 1) Dapatkan dataframe: prioritas session_state, lalu file lokal (root atau pages/) ---
+# --- 1) Ambil data: prioritas session, lalu file lokal (root atau pages/) ---
 df = None
 if "data" in st.session_state:
     df = st.session_state["data"]
 else:
-    # coba fallback: cari file di root atau di pages/
     for candidate in ["data_kekerasan_perempuan.csv", "pages/data_kekerasan_perempuan.csv"]:
         if os.path.exists(candidate):
             try:
@@ -23,21 +21,20 @@ else:
                 st.session_state["data"] = df
                 break
             except Exception:
-                # coba pakai read_excel jika csv gagal (just in case)
                 try:
                     df = pd.read_excel(candidate)
-                    st.info(f"Membaca data Excel dari: {candidate}")
+                    st.info(f"Membaca Excel dari: {candidate}")
                     st.session_state["data"] = df
                     break
                 except Exception:
                     df = None
 
-# Jika masih tidak ada, tampilkan uploader minimal (tidak jadi judul)
+# Jika belum ada data, tampilkan uploader minimal
 if df is None:
-    uploaded = st.file_uploader("", type=["csv", "xlsx"], label_visibility="collapsed")
+    uploaded = st.file_uploader("", type=["csv","xlsx"], label_visibility="collapsed")
     if uploaded:
         try:
-            # simpan sementara ke disk (memudahkan debugging/persistent)
+            # simpan sementara ke disk agar bisa dipakai fallback
             try:
                 with open(uploaded.name, "wb") as f:
                     f.write(uploaded.getbuffer())
@@ -53,163 +50,205 @@ if df is None:
             st.error(f"Gagal membaca file: {e}")
             st.stop()
     else:
-        st.warning("Data belum tersedia. Silakan upload file CSV/Excel (di kotak atas).")
+        st.warning("Data belum tersedia. Silakan unggah file CSV/Excel (kotak upload di atas).")
         st.stop()
 
-# --- 2) Normalisasi kolom: temukan kolom tahun, provinsi, jumlah, jenis (case-insensitive, substring) ---
+# --- 2) Tampilkan kolom asli supaya jelas ---
+st.markdown("**Kolom asli di file:**")
+st.write(df.columns.tolist())
+
+# --- 3) Bersihkan data wide menjadi long jika perlu ---
+# Heuristik: ada kolom bernama 'cakupan' atau 'provinsi' atau 'Cakupan'
+cols_lower = [c.lower() for c in df.columns]
+prov_col = None
+for candidate in ["cakupan", "provinsi", "prov", "nama provinsi", "region"]:
+    if candidate in cols_lower:
+        prov_col = df.columns[cols_lower.index(candidate)]
+        break
+
+# Jika tidak ada prov_col, coba kolom kedua (bila format sama seperti screenshot: kolom B)
+if prov_col is None:
+    # ambil kolom non-numeric pertama sebagai provinsi
+    non_num = df.select_dtypes(exclude="number").columns.tolist()
+    if non_num:
+        prov_col = non_num[0]
+
+# Hapus kolom yang bukan jenis: mis. 'No', 'Satuan' dll.
+exclude_names = ["no", "satuan", prov_col]
+numeric_candidates = []
+for c in df.columns:
+    if c not in (exclude_names if exclude_names else []):
+        # anggap numeric jika dtype numeric atau seluruh nilai bisa dikonversi ke angka
+        try:
+            pd.to_numeric(df[c].dropna().astype(str).str.replace(",", "").str.strip(), errors="raise")
+            numeric_candidates.append(c)
+        except Exception:
+            # bukan numeric
+            pass
+
+# Jika numeric_candidates lebih dari 0 -> kemungkinan wide format
+if len(numeric_candidates) >= 1:
+    st.info("Terlihat dataset wide: kolom jenis kekerasan terdeteksi. Mengkonversi ke format long...")
+    # Buang baris total jika ada (misal 'INDONESIA' atau baris yang memiliki string 'INDONESIA' di prov_col)
+    if prov_col in df.columns:
+        df = df[~df[prov_col].astype(str).str.strip().str.upper().eq("INDONESIA")]
+        # juga hilangkan baris yang hanya berisi 'No' atau header berulang
+        df = df[~df[prov_col].astype(str).str.strip().str.lower().isin(["no", ""])]
+    # lakukan melt
+    id_vars = [prov_col] if prov_col else []
+    df_long = df.melt(id_vars=id_vars, value_vars=numeric_candidates,
+                      var_name="Jenis", value_name="Jumlah")
+    # bersihkan nama kolom
+    if prov_col:
+        df_long = df_long.rename(columns={prov_col: "Provinsi"})
+    else:
+        df_long = df_long.rename(columns={id_vars[0]: "Provinsi"} if id_vars else {"variable": "Provinsi"})
+    # bersihkan nilai jumlah (hapus koma, spasi)
+    df_long["Jumlah"] = pd.to_numeric(df_long["Jumlah"].astype(str).str.replace(",", "").str.strip(), errors="coerce")
+    # tambahkan kolom Tahun (default 2024) — beri pilihan kepada user
+    tahun_default = 2024
+    tahun_input = st.number_input("Tahun untuk data ini (jika semua 2024, biarkan saja)", value=tahun_default, step=1)
+    df_long["Tahun"] = int(tahun_input)
+    # simpan kembali sebagai df yang dipakai pipeline
+    df = df_long.copy()
+    st.markdown("Contoh data setelah konversi ke long (5 baris):")
+    st.dataframe(df.head())
+else:
+    st.info("Dataset tampak sudah dalam format long atau tidak ada kolom numerik yang terdeteksi sebagai jenis kekerasan.")
+    # pastikan minimal punya kolom Provinsi, Jenis, Jumlah
+    # coba rename otomatis jika kolom ada
+    possible_prov = prov_col if prov_col in df.columns else None
+    if possible_prov and "Provinsi" not in df.columns:
+        df = df.rename(columns={possible_prov: "Provinsi"})
+    # coba normalisasi kolom jumlah (cari nama 'jumlah' atau 'kasus')
+    for candidate in df.columns:
+        if any(k in candidate.lower() for k in ["jumlah", "kasus", "total", "nilai"]):
+            if candidate != "Jumlah":
+                df = df.rename(columns={candidate: "Jumlah"})
+            break
+    # coba cari kolom jenis
+    if "Jenis" not in df.columns:
+        # take first non-numeric column that is not prov
+        candidates = [c for c in df.columns if c not in (possible_prov, "Jumlah") and df[c].dtype == object]
+        if candidates:
+            df = df.rename(columns={candidates[0]: "Jenis"})
+
+# Simpan final ke session
+st.session_state["data"] = df
+
+# --- 4) Deteksi kolom pipeline dan tampilkan hasil deteksi ---
 def find_col(columns, keywords):
-    cols_low = [c.lower() for c in columns]
     for kw in keywords:
-        for i, col in enumerate(cols_low):
-            if kw.lower() in col:
-                return columns[i]
+        for c in columns:
+            if kw.lower() in c.lower():
+                return c
     return None
 
-cols = df.columns.tolist()
-col_tahun = find_col(cols, ["tahun", "year"])
-col_prov = find_col(cols, ["provinsi", "province", "propinsi", "region"])
-col_jumlah = find_col(cols, ["jumlah", "kasus", "total", "count", "nilai"])
-col_jenis = find_col(cols, ["jenis", "kekerasan", "kategori", "type"])
+cols_now = df.columns.tolist()
+col_tahun = find_col(cols_now, ["tahun", "year"])
+col_prov = find_col(cols_now, ["provinsi", "prov", "cakupan", "province"])
+col_jumlah = find_col(cols_now, ["jumlah", "kasus", "total", "count", "nilai"])
+col_jenis = find_col(cols_now, ["jenis", "kekerasan", "kategori", "type"])
 
-# Pastikan kolom jumlah dan tahun numeric bila ada
-if col_jumlah:
-    df[col_jumlah] = pd.to_numeric(df[col_jumlah], errors="coerce")
-if col_tahun:
-    df[col_tahun] = pd.to_numeric(df[col_tahun], errors="coerce")
+st.markdown("**Kolom terdeteksi (setelah pra-pemrosesan):**")
+st.write({"tahun": col_tahun, "provinsi": col_prov, "jumlah": col_jumlah, "jenis": col_jenis})
 
-# Debug kecil (tampilkan kolom terdeteksi)
-st.write("Kolom terdeteksi:", {"tahun": col_tahun, "provinsi": col_prov, "jumlah": col_jumlah, "jenis": col_jenis})
-
-# --- 3) UI Filter ---
+# --- 5) Filter UI ---
 st.markdown("---")
 st.subheader("Filter Data")
 
-# provinsi options
-if col_prov:
-    prov_options = sorted(df[col_prov].dropna().astype(str).unique().tolist())
-else:
-    prov_options = []
+prov_options = sorted(df[col_prov].dropna().astype(str).unique().tolist()) if col_prov else []
+jenis_options = sorted(df[col_jenis].dropna().astype(str).unique().tolist()) if col_jenis else []
 
 prov_selected = st.multiselect("Pilih provinsi (kosong = semua)", options=prov_options)
+jenis_selected = st.multiselect("Pilih jenis kekerasan (kosong = semua)", options=jenis_options)
 
-# tahun range
+# Tahun filter
 if col_tahun:
-    year_min = int(df[col_tahun].dropna().min())
-    year_max = int(df[col_tahun].dropna().max())
+    year_min = int(df[col_tahun].min())
+    year_max = int(df[col_tahun].max())
     tahun_range = st.slider("Rentang Tahun", min_value=year_min, max_value=year_max, value=(year_min, year_max))
 else:
     tahun_range = None
 
-# jenis
-if col_jenis:
-    jenis_options = sorted(df[col_jenis].dropna().astype(str).unique().tolist())
-else:
-    jenis_options = []
-jenis_selected = st.multiselect("Pilih jenis kekerasan (kosong = semua)", options=jenis_options)
-
-# tombol terapkan (opsional)
 if st.button("Terapkan filter"):
     st.experimental_rerun()
 
-# --- 4) Terapkan filter ---
+# Terapkan filter
 filtered = df.copy()
 if prov_selected and col_prov:
     filtered = filtered[filtered[col_prov].astype(str).isin(prov_selected)]
-if tahun_range and col_tahun:
-    filtered = filtered[(filtered[col_tahun] >= tahun_range[0]) & (filtered[col_tahun] <= tahun_range[1])]
 if jenis_selected and col_jenis:
     filtered = filtered[filtered[col_jenis].astype(str).isin(jenis_selected)]
+if tahun_range and col_tahun:
+    filtered = filtered[(filtered[col_tahun] >= tahun_range[0]) & (filtered[col_tahun] <= tahun_range[1])]
 
 if filtered.empty:
     st.warning("Hasil filter kosong. Coba opsi filter lain.")
     st.stop()
 
-# --- 5) Tampilkan tabel & download ---
+# --- 6) Preview & download ---
 st.markdown("---")
 st.subheader("Preview Data (hasil filter)")
 st.dataframe(filtered, use_container_width=True)
-
 csv = filtered.to_csv(index=False).encode("utf-8")
 st.download_button("Download CSV hasil filter", data=csv, file_name="data_kekerasan_filtered.csv", mime="text/csv")
 
-# --- 6) Visualisasi ---
+# --- 7) Visualisasi sederhana ---
 st.markdown("---")
 st.subheader("Visualisasi")
 
 chart_type = st.selectbox("Pilih jenis grafik", options=[
-    "Line Chart (Tren per Tahun)",
-    "Bar Chart (Per Provinsi)",
-    "Grouped Bar (Provinsi per Tahun)",
-    "Stacked Bar (Per Tahun by Jenis)"])
+    "Bar Chart (Per Provinsi untuk Jenis terpilih)",
+    "Stacked Bar (Per Provinsi, semua jenis)",
+    "Pie Chart (Distribusi jenis, diseluruh pilihan)"
+])
 
-# Line chart: total per tahun
-if chart_type == "Line Chart (Tren per Tahun)":
-    if not col_tahun or not col_jumlah:
-        st.error("Butuh kolom Tahun dan Jumlah untuk membuat line chart.")
+if chart_type == "Bar Chart (Per Provinsi untuk Jenis terpilih)":
+    if not col_jenis or not col_prov or not col_jumlah:
+        st.error("Butuh kolom Provinsi, Jenis, dan Jumlah untuk membuat grafik ini.")
     else:
-        agg = filtered.groupby(col_tahun)[col_jumlah].sum().reset_index().sort_values(col_tahun)
-        fig, ax = plt.subplots(figsize=(9,4))
-        ax.plot(agg[col_tahun], agg[col_jumlah], marker="o")
-        ax.set_xlabel(col_tahun)
-        ax.set_ylabel("Jumlah Kasus")
-        ax.set_title("Tren Jumlah Kasus per Tahun")
-        ax.grid(True)
-        st.pyplot(fig)
-
-# Bar chart: per provinsi (sum)
-elif chart_type == "Bar Chart (Per Provinsi)":
-    if not col_prov or not col_jumlah:
-        st.error("Butuh kolom Provinsi dan Jumlah untuk bar chart.")
-    else:
-        agg = filtered.groupby(col_prov)[col_jumlah].sum().sort_values(ascending=False)
+        # pilih satu jenis
+        jenis_ = st.selectbox("Pilih jenis untuk bar chart", options=jenis_options)
+        df_plot = filtered[filtered[col_jenis] == jenis_].groupby(col_prov)[col_jumlah].sum().sort_values(ascending=False)
         fig, ax = plt.subplots(figsize=(10,5))
-        ax.bar(agg.index.astype(str), agg.values)
+        ax.bar(df_plot.index.astype(str), df_plot.values)
         ax.set_xlabel("Provinsi")
         ax.set_ylabel("Jumlah Kasus")
-        ax.set_title("Jumlah Kasus per Provinsi")
+        ax.set_title(f"Jumlah kasus jenis '{jenis_}' per Provinsi")
         plt.xticks(rotation=45, ha="right")
         st.pyplot(fig)
 
-# Grouped bar (provinsi per tahun)
-elif chart_type == "Grouped Bar (Provinsi per Tahun)":
-    if not col_prov or not col_tahun or not col_jumlah:
-        st.error("Butuh kolom Provinsi, Tahun, dan Jumlah untuk grouped bar.")
+elif chart_type == "Stacked Bar (Per Provinsi, semua jenis)":
+    if not col_prov or not col_jenis or not col_jumlah:
+        st.error("Butuh kolom Provinsi, Jenis, dan Jumlah untuk stacked bar.")
     else:
-        # pilih beberapa provinsi (jika belum dipilih)
-        sel_prov = prov_selected if prov_selected else prov_options[:6]
-        df_group = filtered[filtered[col_prov].astype(str).isin(sel_prov)].groupby([col_tahun, col_prov])[col_jumlah].sum().unstack(fill_value=0)
-        fig, ax = plt.subplots(figsize=(12,5))
-        df_group.plot(kind="bar", ax=ax)
-        ax.set_xlabel("Tahun")
-        ax.set_ylabel("Jumlah Kasus")
-        ax.set_title("Perbandingan Jumlah Kasus per Provinsi per Tahun")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-
-# Stacked bar per tahun by jenis
-elif chart_type == "Stacked Bar (Per Tahun by Jenis)":
-    if not col_tahun or not col_jenis or not col_jumlah:
-        st.error("Butuh kolom Tahun, Jenis, dan Jumlah untuk stacked bar.")
-    else:
-        df_stack = filtered.groupby([col_tahun, col_jenis])[col_jumlah].sum().unstack(fill_value=0)
-        fig, ax = plt.subplots(figsize=(12,5))
+        df_stack = filtered.groupby([col_prov, col_jenis])[col_jumlah].sum().unstack(fill_value=0)
+        fig, ax = plt.subplots(figsize=(12,6))
         df_stack.plot(kind="bar", stacked=True, ax=ax)
-        ax.set_xlabel("Tahun")
+        ax.set_xlabel("Provinsi")
         ax.set_ylabel("Jumlah Kasus")
-        ax.set_title("Jumlah Kasus per Tahun menurut Jenis Kekerasan (Stacked)")
+        ax.set_title("Jumlah Kasus per Provinsi menurut Jenis (Stacked)")
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
-# --- 7) Statistik ringkas ---
+elif chart_type == "Pie Chart (Distribusi jenis, diseluruh pilihan)":
+    if not col_jenis or not col_jumlah:
+        st.error("Butuh kolom Jenis dan Jumlah untuk pie chart.")
+    else:
+        dist = filtered.groupby(col_jenis)[col_jumlah].sum().sort_values(ascending=False)
+        fig, ax = plt.subplots(figsize=(7,7))
+        ax.pie(dist.values, labels=dist.index.astype(str), autopct="%1.1f%%")
+        ax.set_title("Distribusi jenis kekerasan (dari data saat ini)")
+        st.pyplot(fig)
+
+# --- 8) Statistik ringkas ---
 st.markdown("---")
 st.subheader("Statistik Ringkas")
 try:
     st.write(filtered.select_dtypes(include="number").describe().T)
 except Exception:
     st.write("Tidak ada kolom numerik untuk dihitung statistik.")
-
-st.info("Jika grafik tidak muncul, periksa apakah kolom 'Jumlah' terdeteksi sebagai numerik. Kamu bisa men-rename kolom di file CSV agar sesuai (mis: 'Jumlah' atau 'Kasus').")
-
 
 
 
