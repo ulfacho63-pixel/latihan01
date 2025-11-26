@@ -35,17 +35,39 @@ if page == "Home":
     st.markdown("---")
 
     # Fitur
-    st.subheader("Fitur Utama")
-    f1, f2, f3 = st.columns(3)
-    with f1:
-        st.markdown("### 📁 Upload Data")
-        st.write("Unggah file CSV berisi data kekerasan seksual untuk melihat tabel dan grafiknya.")
-    with f2:
-        st.markdown("### 📊 Visualisasi Kasus")
-        st.write("Lihat grafik tren, perbandingan tahunan, dan pola data lainnya.")
-    with f3:
-        st.markdown("### 📝 Informasi Pendukung")
-        st.write("Tampilkan ringkasan data, penjelasan, dan interpretasi sederhana.")
+    # Upload Data Section
+    st.subheader("📁 Upload Data Kekerasan Seksual")
+    uploaded = st.file_uploader("Upload file CSV", type=["csv"])
+
+if uploaded:
+    try:
+        df = pd.read_csv(uploaded)
+        st.session_state["data"] = df
+        st.success("Data berhasil diupload! Sekarang kamu bisa membuka halaman Visualisasi Data.")
+
+        st.write("Preview Data:")
+        st.dataframe(df)
+
+    except Exception as e:
+        st.error(f"Gagal membaca file: {e}")
+
+st.markdown("---")
+
+# Fitur
+st.subheader("Fitur Utama")
+f1, f2, f3 = st.columns(3)
+
+with f1:
+    st.markdown("### 📁 Upload Data")
+    st.write("Unggah file CSV berisi data kekerasan seksual untuk melihat tabel dan grafiknya.")
+
+with f2:
+    st.markdown("### 📊 Visualisasi Kasus")
+    st.write("Lihat grafik tren, perbandingan tahunan, dan pola data lainnya.")
+
+with f3:
+    st.markdown("### 📝 Informasi Pendukung")
+    st.write("Tampilkan ringkasan data, penjelasan, dan interpretasi sederhana.")
 
     st.markdown("---")
 
