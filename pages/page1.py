@@ -207,11 +207,6 @@ elif col_jenis:
 else:
     st.info("Kolom jenis kekerasan tidak ada atau tidak terdeteksi (opsional).")
 
-# Preview sample baris (opsional, singkat)
-st.markdown("---")
-st.subheader("Contoh baris data (2024)")
-st.dataframe(data2024.head(10), use_container_width=True)
-
 # --------------------------
 # Penjelasan singkat / edukatif
 # --------------------------
@@ -227,4 +222,4 @@ st.write(
 
 st.info("Catatan: angka yang ditampilkan adalah angka terlapor/tercatat pada dataset. Hormati privasi dan martabat korban saat membagikan data ini.")
 st.markdown("---")
-st.caption("Tip: Jika kamu ingin Home selalu menampilkan ringkasan 2024 tanpa perlu upload tiap sesi, simpan file CSV di folder project dengan nama 'data_kekerasan_perempuan.csv'.")
+
