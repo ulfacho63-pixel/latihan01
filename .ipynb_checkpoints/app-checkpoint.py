@@ -15,7 +15,7 @@ pages = [
     st.Page(
         page="pages/page1.py",
         title="Visualisasi Data Kekerasan Seksual Tahun 2024",
-        icon="📊 📈"   # icon untuk halaman visualisasi utama
+        icon="📊"   # icon untuk halaman visualisasi utama
     ),
     st.Page(
         page="pages/page2.py",
@@ -25,7 +25,7 @@ pages = [
     st.Page(
         page="pages/page3.py",
         title="Tentang Kekerasan Seksual",
-        icon="🚺 ⚠️ 🛡️"  # icon untuk awareness
+        icon="⚠️"  # icon untuk awareness
     )
 ]
 
