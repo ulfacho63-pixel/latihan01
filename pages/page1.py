@@ -17,7 +17,7 @@ with st.sidebar:
 # --------------------------
 # Header utama
 # --------------------------
-st.title("🏠 Ringkasan Data Kekerasan Seksual terhadap Perempuan — Tahun 2024")
+st.title("🏠 Kekerasan Seksual terhadap Perempuan — Tahun 2024")
 st.write(
     "Halaman ini menampilkan ringkasan data untuk **tahun 2024**. "
     "Tujuannya untuk meningkatkan kesadaran (awareness) dan memberikan gambaran singkat yang mudah dipahami."
