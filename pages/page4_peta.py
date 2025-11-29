@@ -191,5 +191,4 @@ st.subheader("Tabel ringkasan per provinsi")
 st.dataframe(grouped.reset_index().rename(columns={prov_col: "Provinsi", jumlah_col: "Jumlah"}), use_container_width=True)
 
 st.markdown(
-    """
 )
