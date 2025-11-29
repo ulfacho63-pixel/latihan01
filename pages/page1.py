@@ -8,14 +8,14 @@ st.set_page_config(page_title="Ulfa App - Home", page_icon="📊", layout="wide"
 # Sidebar sederhana
 with st.sidebar:
     st.title("Menu")
-    st.write("📊 Visualisasi Data Kekerasan Seksual Tahun 2024")
+    st.write("📊 Visualisasi Data Kekerasan Terhadap Perempuan Tahun 2024")
     st.write("📰 Berita")
     st.write("⚠️ Tentang Kekerasan Seksual")
     st.markdown("---")
     st.write("Made by Ulfa 🎓")
 
 # Header
-st.title("⚠️ Kekerasan Seksual terhadap Perempuan — Tahun 2024")
+st.title("⚠️ Kekerasan terhadap Perempuan — Tahun 2024")
 st.write("Halaman ini menampilkan ringkasan data untuk **tahun 2024** berdasarkan file CSV yang kamu upload/simpan.")
 st.markdown("---")
 
