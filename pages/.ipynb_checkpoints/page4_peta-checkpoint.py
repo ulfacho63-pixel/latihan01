@@ -1,31 +1,36 @@
-
 import streamlit as st
 import pandas as pd
-import random
+import plotly.express as px
+import json
+import requests
 
-st.title("🗺️ Peta Sebaran Kasus (Contoh Data)")
+st.title("🗺️ Peta Sebaran Kasus Kekerasan terhadap Perempuan")
 
-# Jika tidak ada dataset asli, gunakan mock data
-prov = [
-    "Aceh","Sumatera Utara","Sumatera Barat","Riau","Jambi","Sumatera Selatan",
-    "Bengkulu","Lampung","DKI Jakarta","Jawa Barat","Jawa Tengah","DI Yogyakarta",
-    "Jawa Timur","Banten","Bali","NTB","NTT","Kalimantan Barat","Kalimantan Tengah",
-    "Kalimantan Selatan","Kalimantan Timur","Sulawesi Utara","Sulawesi Tengah",
-    "Sulawesi Selatan","Sulawesi Tenggara","Gorontalo","Maluku","Maluku Utara",
-    "Papua","Papua Barat"
-]
+# --- Load data CSV ---
+df = pd.read_csv("data_sebaran_kasus.csv")
 
-rows = []
-for p in prov:
-    rows.append({
-        "Provinsi": p,
-        "Jumlah": random.randint(50, 1500),
-        "Tahun": 2024
-    })
+# Sesuaikan nama kolom jika perlu
+prov_col = "Provinsi"
+jumlah_col = "Jumlah"
 
-df = pd.DataFrame(rows)
+# --- Load GeoJSON Indonesia ---
+geojson_url = "https://raw.githubusercontent.com/superpikar/indonesia-geojson/master/indonesia-provinsi.json"
+geojson = requests.get(geojson_url).json()
 
-st.subheader("Total Kasus per Provinsi")
-st.bar_chart(df.set_index("Provinsi")["Jumlah"])
+# --- Plot Peta ---
+fig = px.choropleth(
+    df,
+    geojson=geojson,
+    locations=prov_col,
+    featureidkey="properties.Propinsi",
+    color=jumlah_col,
+    color_continuous_scale="Reds",
+    hover_name=prov_col,
+    title="Sebaran Kasus Kekerasan terhadap Perempuan per Provinsi"
+)
 
-st.dataframe(df)
+fig.update_geos(fitbounds="locations", visible=False)
+fig.update_layout(height=700)
+
+st.plotly_chart(fig, use_container_width=True)
+
