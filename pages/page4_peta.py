@@ -163,4 +163,4 @@ st.dataframe(grouped.reset_index().rename(columns={prov_col: "Provinsi", jumlah_
 
 st.markdown(
     """
-)))
+)
