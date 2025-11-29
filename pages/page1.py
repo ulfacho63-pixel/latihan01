@@ -15,7 +15,7 @@ with st.sidebar:
     st.write("Made by Ulfa 🎓")
 
 # Header
-st.title("🏠 Kekerasan Seksual terhadap Perempuan — Tahun 2024")
+st.title("⚠️ Kekerasan Seksual terhadap Perempuan — Tahun 2024")
 st.write("Halaman ini menampilkan ringkasan data untuk **tahun 2024** berdasarkan file CSV yang kamu upload/simpan.")
 st.markdown("---")
 
