@@ -163,5 +163,3 @@ st.dataframe(grouped.reset_index().rename(columns={prov_col: "Provinsi", jumlah_
 
 st.markdown(
     """
-**Instruksi jika ingin peta choropleth interaktif:**
-1. Install dependensi: `folium` dan `streamlit-folium` (atau tambahkan ke `requirements.txt`):
