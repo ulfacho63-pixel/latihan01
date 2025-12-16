@@ -4,21 +4,24 @@ import pandas as pd
 import json
 import requests
 
+from streamlit_folium import st_folium
+import folium
+
 st.set_page_config(layout="wide")
 st.title("🗺️ Peta Sebaran Kasus Kekerasan terhadap Perempuan")
 
-# -------------------------------------------------------------------
-# LOAD CSV
-# -------------------------------------------------------------------
+# ======================================================================
+# 1. LOAD CSV
+# ======================================================================
 CSV_PATH = "data_sebaran_kasus.csv"
 
 df = pd.read_csv(CSV_PATH, sep=None, engine="python")
 df.columns = df.columns.str.strip()
 
 prov_col = "Cakupan"
-jumlah_col = df.columns[2]   # "Jumlah Kasus (Kasus)"
+jumlah_col = df.columns[2]   # kolom Jumlah Kasus
 
-# Bersihkan angka
+# cleaning angka
 df[jumlah_col] = (
     df[jumlah_col]
     .astype(str)
@@ -28,9 +31,9 @@ df[jumlah_col] = (
 )
 df[jumlah_col] = pd.to_numeric(df[jumlah_col], errors="coerce").fillna(0).astype(int)
 
-# -------------------------------------------------------------------
-# MAPPING NAMA PROVINSI CSV → GEOJSON (34 Provinsi)
-# -------------------------------------------------------------------
+# ======================================================================
+# 2. MAPPING CSV NAMA PROVINSI → GEOJSON 34 PROVINSI
+# ======================================================================
 mapping = {
     "ACEH": "Aceh",
     "SUMATERA UTARA": "Sumatera Utara",
@@ -65,25 +68,22 @@ mapping = {
     "MALUKU": "Maluku",
     "MALUKU UTARA": "Maluku Utara",
     "PAPUA": "Papua",
-    "PAPUA BARAT": "Papua Barat",
+    "PAPUA BARAT": "Papua Barat"
 }
 
-# -------------------------------------------------------------------
-# BUANG PROVINSI YANG TIDAK ADA DI GEOJSON 34 PROVINSI
-# -------------------------------------------------------------------
+# provinsi yang tidak ada di GeoJSON 34 → dibuang
 valid_keys = list(mapping.keys())
 
 df = df[df[prov_col].isin(valid_keys)]
 
-# Ganti nama provinsi ke format GeoJSON
 df[prov_col] = df[prov_col].replace(mapping)
 
-st.subheader("📌 Data setelah mapping dan pembersihan:")
+st.subheader("📌 Data setelah mapping & pembersihan:")
 st.dataframe(df, use_container_width=True)
 
-# -------------------------------------------------------------------
-# LOAD GEOJSON 34 PROVINSI
-# -------------------------------------------------------------------
+# ======================================================================
+# 3. LOAD GEOJSON 34 PROVINSI
+# ======================================================================
 geojson_url = "https://raw.githubusercontent.com/superpikar/indonesia-geojson/master/indonesia-province.json"
 
 try:
@@ -95,24 +95,40 @@ except Exception as e:
     st.error(f"Gagal memuat GeoJSON: {e}")
     st.stop()
 
-# -------------------------------------------------------------------
-# CHOROPLETH MAP
-# -------------------------------------------------------------------
-from streamlit_folium import st_folium
-import folium
+# ======================================================================
+# 4. DETEKSI OTOMATIS KEY NAMA PROVINSI DI GEOJSON
+# ======================================================================
+first_properties = geojson_data["features"][0]["properties"]
 
+possible_keys = ["NAME_1", "Propinsi", "PROVINSI", "provinsi", "name"]
+prop_key = None
+
+for k in possible_keys:
+    if k in first_properties:
+        prop_key = k
+        break
+
+if not prop_key:
+    st.error(f"Tidak menemukan key nama provinsi dalam GeoJSON. Keys ditemukan: {list(first_properties.keys())}")
+    st.stop()
+
+st.success(f"Menggunakan key GeoJSON: {prop_key}")
+
+# ======================================================================
+# 5. CHOROPLETH MAP
+# ======================================================================
 m = folium.Map(location=[-2.5, 118], zoom_start=5, tiles="cartodbpositron")
 
 folium.Choropleth(
     geo_data=geojson_data,
     data=df,
     columns=[prov_col, jumlah_col],
-    key_on="feature.properties.NAME_1",   # kunci provinsi di GeoJSON
+    key_on=f"feature.properties.{prop_key}",
     fill_color="YlOrRd",
     fill_opacity=0.8,
     line_opacity=0.2,
     legend_name="Jumlah Kasus Kekerasan",
-    nan_fill_color="white"
+    nan_fill_color="white",
 ).add_to(m)
 
 folium.LayerControl().add_to(m)
