@@ -1,67 +1,57 @@
 import streamlit as st
+import pandas as pd
+import folium
 import requests
-from bs4 import BeautifulSoup
+from streamlit_folium import st_folium
 
 st.set_page_config(layout="wide")
-st.title("📊 Ringkasan Kekerasan KemenPPPA — Ditampilkan di Streamlit")
+st.title("🗺️ Peta Penyebaran Kasus Kekerasan (Online Map Source)")
 
-url = "https://kekerasan.kemenpppa.go.id/ringkasan"
+# ============================
+# 1. Load CSV
+# ============================
+df = pd.read_csv("data_sebaran_kasus.csv")
+prov_col = "Cakupan"
+jumlah_col = df.columns[2]
 
-st.subheader("🔹 Metode 1: Iframe (langsung embed website)")
-st.info("Streamlit mencoba menampilkan halaman asli... Jika kosong → website menolak iframe.")
+df[jumlah_col] = (
+    df[jumlah_col].astype(str)
+    .str.replace(",", "")
+    .str.replace(".", "", regex=False)
+    .str.extract(r"(\d+)", expand=False)
+)
+df[jumlah_col] = pd.to_numeric(df[jumlah_col], errors="coerce").fillna(0)
 
-# ===============================================================
-# 1️⃣ COBA TAMPILKAN IFRAME
-# ===============================================================
-try:
-    st.components.v1.iframe(url, width=1350, height=850, scrolling=True)
-    st.success("Iframe ditampilkan (jika terlihat).")
-except Exception as e:
-    st.error(f"Iframe gagal: {e}")
+# ============================
+# 2. Load GeoJSON ONLINE
+# ============================
+geo_url = "https://raw.githubusercontent.com/superpikar/indonesia-geojson/master/indonesia-province.json"
 
-st.markdown("---")
+geojson = requests.get(geo_url).json()
 
-# ===============================================================
-# 2️⃣ COBA SCRAPE HTML (fallback)
-# ===============================================================
-st.subheader("🔹 Metode 2: Render HTML (fallback jika iframe ditolak)")
-try:
-    response = requests.get(url, timeout=10)
+# cek key nama provinsi
+props = geojson["features"][0]["properties"]
+key_name = [k for k in props.keys() if "name" in k.lower() or "prov" in k.lower()][0]
 
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.text, "html.parser")
+# ============================
+# 3. Peta Folium
+# ============================
+m = folium.Map(
+    location=[-2.5, 118],
+    zoom_start=5,
+    tiles="cartodbpositron"
+)
 
-        # Render seluruh HTML ke Streamlit
-        st.components.v1.html(str(soup), height=850, scrolling=True)
-        st.success("HTML berhasil dimuat dari server KemenPPPA.")
+folium.Choropleth(
+    geo_data=geojson,
+    data=df,
+    columns=[prov_col, jumlah_col],
+    key_on=f"feature.properties.{key_name}",
+    fill_color="YlOrRd",
+    fill_opacity=0.8,
+    line_opacity=0.3,
+    nan_fill_color="white",
+    legend_name="Jumlah Kasus Kekerasan",
+).add_to(m)
 
-    else:
-        st.error(f"Gagal memuat HTML. Status code: {response.status_code}")
-
-except Exception as e:
-    st.error("Tidak bisa mengambil HTML dari website.")
-    st.exception(e)
-
-st.markdown("---")
-
-# ===============================================================
-# 3️⃣ INFO TAMBAHAN: Jika website berbasis React (SPA)
-# ===============================================================
-st.subheader("ℹ️ Catatan Penting")
-st.write("""
-Dashboard KemenPPPA dibuat menggunakan framework **React/JavaScript**. 
-Banyak website SPA (Single Page Application) tidak bisa:
-- ditampilkan via iframe, atau  
-- di-scrape HTML-nya (karena konten dimuat via JavaScript, bukan HTML statis).
-
-Jika kedua metode di atas tidak muncul kontennya, berarti:
-- Website melarang iframe (X-Frame-Options), dan
-- JavaScript dinonaktifkan saat scraping.
-
-Solusi terbaik: **akses API backend mereka** untuk mengambil datanya secara langsung.
-""")
-
-# ===============================================================
-# 4️⃣ Arahkan ke API jika diperlukan
-# ===============================================================
-st.write("Jika kamu ingin, saya bisa buatkan script untuk mengambil data dari API KemenPPPA.")
+st_folium(m, width="100%", height=650)
