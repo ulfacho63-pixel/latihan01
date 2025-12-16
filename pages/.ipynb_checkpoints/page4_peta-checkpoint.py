@@ -1,19 +1,20 @@
 import streamlit as st
 import pandas as pd
-import folium
-import requests
-from streamlit_folium import st_folium
+import altair as alt
 
-st.set_page_config(layout="wide")
-st.title("🗺️ Peta Penyebaran Kasus Kekerasan (Online Map Source)")
+st.set_page_config(page_title="Sebaran Kasus", layout="wide")
+st.title("📊 Dashboard Sebaran Kasus Kekerasan Terhadap Perempuan")
 
-# ============================
-# 1. Load CSV
-# ============================
-df = pd.read_csv("data_sebaran_kasus.csv")
+# ==========================================================
+# 1. LOAD DATA
+# ==========================================================
+CSV_PATH = "data_sebaran_kasus.csv"
+df = pd.read_csv(CSV_PATH, sep=None, engine="python")
+
 prov_col = "Cakupan"
-jumlah_col = df.columns[2]
+jumlah_col = df.columns[2]  # kolom jumlah kasus
 
+# Bersihkan angka
 df[jumlah_col] = (
     df[jumlah_col].astype(str)
     .str.replace(",", "")
@@ -22,36 +23,64 @@ df[jumlah_col] = (
 )
 df[jumlah_col] = pd.to_numeric(df[jumlah_col], errors="coerce").fillna(0)
 
-# ============================
-# 2. Load GeoJSON ONLINE
-# ============================
-geo_url = "https://raw.githubusercontent.com/superpikar/indonesia-geojson/master/indonesia-province.json"
+# ==========================================================
+# 2. RINGKASAN STATISTIK
+# ==========================================================
+total_kasus = df[jumlah_col].sum()
+prov_tertinggi = df.sort_values(jumlah_col, ascending=False).iloc[0]
 
-geojson = requests.get(geo_url).json()
+col1, col2, col3 = st.columns(3)
 
-# cek key nama provinsi
-props = geojson["features"][0]["properties"]
-key_name = [k for k in props.keys() if "name" in k.lower() or "prov" in k.lower()][0]
+col1.metric("Total Kasus", f"{total_kasus:,}")
+col2.metric("Provinsi Tertinggi", prov_tertinggi[prov_col])
+col3.metric("Jumlah Pada Provinsi Tertinggi", f"{prov_tertinggi[jumlah_col]:,}")
 
-# ============================
-# 3. Peta Folium
-# ============================
-m = folium.Map(
-    location=[-2.5, 118],
-    zoom_start=5,
-    tiles="cartodbpositron"
+st.markdown("---")
+
+# ==========================================================
+# 3. GRAFIK BATANG PER PROVINSI
+# ==========================================================
+st.subheader("📈 Grafik Kasus per Provinsi")
+
+chart = alt.Chart(df).mark_bar().encode(
+    x=alt.X(prov_col, sort='-y', title="Provinsi"),
+    y=alt.Y(jumlah_col, title="Jumlah Kasus"),
+    tooltip=[prov_col, jumlah_col]
+).properties(
+    width="container",
+    height=400
 )
 
-folium.Choropleth(
-    geo_data=geojson,
-    data=df,
-    columns=[prov_col, jumlah_col],
-    key_on=f"feature.properties.{key_name}",
-    fill_color="YlOrRd",
-    fill_opacity=0.8,
-    line_opacity=0.3,
-    nan_fill_color="white",
-    legend_name="Jumlah Kasus Kekerasan",
-).add_to(m)
+st.altair_chart(chart, use_container_width=True)
 
-st_folium(m, width="100%", height=650)
+st.markdown("---")
+
+# ==========================================================
+# 4. PIE CHART 10 PROVINSI TERBESAR
+# ==========================================================
+st.subheader("🍩 10 Provinsi Dengan Kasus Tertinggi")
+
+df_top10 = df.sort_values(jumlah_col, ascending=False).head(10)
+
+pie = alt.Chart(df_top10).mark_arc().encode(
+    theta=alt.Theta(jumlah_col, type="quantitative"),
+    color=alt.Color(prov_col, legend=None),
+    tooltip=[prov_col, jumlah_col]
+).properties(
+    width=300,
+    height=300
+)
+
+st.altair_chart(pie, use_container_width=False)
+
+st.markdown("---")
+
+# ==========================================================
+# 5. TABEL INTERAKTIF
+# ==========================================================
+st.subheader("📄 Tabel Sebaran Kasus per Provinsi")
+
+st.dataframe(
+    df.sort_values(jumlah_col, ascending=False).reset_index(drop=True),
+    use_container_width=True
+)
