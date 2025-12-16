@@ -7,41 +7,30 @@ import os
 st.set_page_config(layout="wide")
 st.title("🗺️ Peta Sebaran Kasus Kekerasan terhadap Perempuan")
 
-# Try optional geo libs (don't crash if not installed)
-try:
-    import folium
-    from streamlit_folium import st_folium
-    FOLIUM_AVAILABLE = True
-except Exception:
-    FOLIUM_AVAILABLE = False
-
-# ---------- Load CSV ----------
-CSV_PATH = "data_sebaran_kasus.csv"  # ubah jika file berbeda
-if not os.path.exists(CSV_PATH):
-    st.error(
-        f"File data tidak ditemukan: `{CSV_PATH}`. "
-        "Letakkan CSV (mis: data_sebaran_kasus.csv) di folder project atau unggah di halaman Visualisasi Data."
-    )
-    st.stop()
-
-# baca CSV dengan delimiter deteksi (toleran terhadap ; atau ,)
 def read_csv_tolerant(path):
-    # coba dengan pandas default
+    # 1. coba baca default (,)
     try:
         df = pd.read_csv(path)
+        # jika hanya 1 kolom padahal seharusnya banyak → coba delimiter ';'
+        if len(df.columns) == 1:
+            df = pd.read_csv(path, sep=';')
         return df
     except Exception:
-        # coba delimiter semicolon
-        try:
-            df = pd.read_csv(path, sep=";")
-            return df
-        except Exception:
-            # coba read with engine python and guess
-            try:
-                df = pd.read_table(path, sep=None, engine="python")
-                return df
-            except Exception as e:
-                raise e
+        pass
+
+    # 2. coba delimiter ;
+    try:
+        df = pd.read_csv(path, sep=';')
+        return df
+    except Exception:
+        pass
+
+    # 3. fallback terakhir: pandas python engine auto-detect
+    try:
+        df = pd.read_table(path, sep=None, engine="python")
+        return df
+    except Exception as e:
+        raise e
 
 try:
     df = read_csv_tolerant(CSV_PATH)
